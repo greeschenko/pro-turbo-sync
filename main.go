@@ -6,16 +6,15 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
+	"strconv"
 	"time"
 )
 
-const N int = 10
-
-var url = "https://public.api.ea.openprocurement.org/api/2/auctions?descending=1&feed=changes"
-
-//var url = "https://public.api.ea2.openprocurement.net/api/2/auctions?descending=1&feed=changes"
-
-//var url = "https://public.api-sandbox.ea2.openprocurement.net/api/2/auctions?descending=1&feed=changes"
+var N int
+var Host string
+var GetUrl string
+var SyncUrlTmpl string
 
 type Page struct {
 	Next_page next_page
@@ -83,11 +82,8 @@ func processSubPage(tmpdata Data, s chan string) {
 
 func syncItem(id string) string {
 	start := time.Now().String()
-	//url := fmt.Sprintf("http://test.polonex.land/prozorrosale2/auctions/get-one-data?id=%s&json=1", id)
-	//url := fmt.Sprintf("http://localhost/prozorrosale2/auctions/get-one-data?id=%s&json=1", id)
 
-	url := fmt.Sprintf("https://polonex.com.ua/prozorrosale/auctions/get-one-data?id=%s&json=1", id)
-	//url := fmt.Sprintf("https://polonex.com.ua/prozorrosale2/auctions/get-one-data?id=%s&json=1", id)
+	url := fmt.Sprintf(SyncUrlTmpl, Host, id)
 
 	res, err := http.Get(url)
 	if err != nil {
@@ -109,10 +105,57 @@ func syncItem(id string) string {
 	//}
 }
 
+func showHelp() {
+	fmt.Println("")
+	fmt.Println("Pro turbo sync - prozorro sync system")
+	fmt.Println("")
+	fmt.Println("use:")
+	fmt.Println("              pro-turbo-sync  cdb1  localhost    prod    100")
+	fmt.Println("                                |         |        |       |")
+	fmt.Println("                                |         |        |       |")
+	fmt.Println("database (cdb1 or cdb2) --------|         |        |       |")
+	fmt.Println("                                          |        |       |")
+	fmt.Println("host -------------------------------------|        |       |")
+	fmt.Println("                                                   |       |")
+	fmt.Println("stage (prod or test) ------------------------------|       |")
+	fmt.Println("                                                           |")
+	fmt.Println("pages to sync (100 item per page) -------------------------|")
+	os.Exit(1)
+}
+
 func main() {
+	if len(os.Args) >= 4 {
+		if os.Args[1] == "cdb1" {
+			SyncUrlTmpl = "http://%s/prozorrosale/auctions/get-one-data?id=%s&json=1"
+			if os.Args[3] == "prod" {
+				GetUrl = "https://public.api.ea.openprocurement.org/api/2/auctions?descending=1&feed=changes"
+			} else if os.Args[3] == "test" {
+				GetUrl = "https://public.api-sandbox.ea.openprocurement.org/api/2/auctions?descending=1&feed=changes"
+			} else {
+				showHelp()
+			}
+		} else if os.Args[1] == "cdb2" {
+			SyncUrlTmpl = "http://%s/prozorrosale2/auctions/get-one-data?id=%s&json=1"
+			if os.Args[3] == "prod" {
+				GetUrl = "https://public.api.ea2.openprocurement.net/api/2/auctions?descending=1&feed=changes"
+			} else if os.Args[3] == "test" {
+				GetUrl = "https://public.api-sandbox.ea2.openprocurement.net/api/2/auctions?descending=1&feed=changes"
+			} else {
+				showHelp()
+			}
+		} else {
+			showHelp()
+		}
+		Host = os.Args[2]
+		N, _ = strconv.Atoi(os.Args[4])
+	} else {
+		showHelp()
+	}
+
 	c := make(chan Page)
 	s := make(chan string)
-	go getPage(url, c)
+
+	go getPage(GetUrl, c)
 	for i := 0; i < N; i++ {
 		val, ok := <-c
 		if ok == false {
